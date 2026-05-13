@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: cod-recovery-center-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SENDIT_API_KEY
+        sync: false
+      - key: SENDIT_WEBHOOK_SECRET
+        sync: false
+      - key: DEFAULT_COMMISSION_AMOUNT
+        value: 15
+      - key: REQUIRE_AUTH
+        value: false
