@@ -10,8 +10,9 @@ import { createCommissionIfEligible, dbQuery, getOrderById, recordFollowup, supa
 requireEnv();
 
 const app = express();
+const isVercel = Boolean(process.env.VERCEL);
 
-app.use(cors({ origin: config.frontendOrigin === "*" ? true : config.frontendOrigin, credentials: true }));
+app.use(cors({ origin: config.frontendOrigin === "*" || isVercel ? true : config.frontendOrigin, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use(morgan("dev"));
 
@@ -191,6 +192,10 @@ app.post("/api/webhooks/sendit", validateWebhookSecret, asyncHandler(async (req,
 
 app.use(errorHandler);
 
-app.listen(config.port, config.host, () => {
-  console.log(`COD Recovery Center API listening on ${config.host}:${config.port}`);
-});
+if (!isVercel) {
+  app.listen(config.port, config.host, () => {
+    console.log(`COD Recovery Center API listening on ${config.host}:${config.port}`);
+  });
+}
+
+export default app;

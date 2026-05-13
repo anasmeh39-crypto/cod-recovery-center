@@ -190,8 +190,43 @@ Webhook:
 
 Recommended deployment:
 
-- Backend: Render or Railway
-- Frontend: Vercel
+- Option 1: Full project on Vercel using same-domain `/api/*`
+- Option 2: Backend on Render/Railway and frontend on Vercel
+
+### Full Project on Vercel
+
+The root-level `vercel.json` deploys:
+
+- frontend build from `frontend/dist`
+- Express API through Vercel serverless at `/api/*`
+
+In Vercel, import the GitHub repository and use the repository root.
+
+Environment variables:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SENDIT_API_KEY`
+- `SENDIT_WEBHOOK_SECRET`
+- `DEFAULT_COMMISSION_AMOUNT=15`
+- `REQUIRE_AUTH=false`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_API_URL` can be empty for same-domain API
+
+After Vercel deploy, your app URL will be:
+
+```txt
+https://your-project.vercel.app
+```
+
+And your Sendit webhook URL will be:
+
+```txt
+https://your-project.vercel.app/api/webhooks/sendit?secret=YOUR_SECRET
+```
+
+### Split Deployment
 
 ### Backend on Render
 
