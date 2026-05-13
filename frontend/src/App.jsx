@@ -31,6 +31,8 @@ const i18n = {
     customer: "Client",
     timeline: "Timeline statut",
     notes: "Notes de suivi",
+    actionHistory: "Action history",
+    noHistory: "No employee action yet.",
     suggested: "Message suggere",
     quickActions: "Actions rapides",
     done: "Done",
@@ -86,6 +88,8 @@ const i18n = {
     customer: "الزبون",
     timeline: "مسار الحالة",
     notes: "ملاحظات المتابعة",
+    actionHistory: "تاريخ الإجراءات",
+    noHistory: "لا يوجد أي إجراء بعد.",
     suggested: "رسالة مقترحة",
     quickActions: "إجراءات سريعة",
     done: "تم",
@@ -588,6 +592,11 @@ function OrderDrawer({ t, order, detail, employees, templates, note, setNote, co
       </div>
 
       <section>
+        <h3>{t.actionHistory}</h3>
+        <ActionHistory t={t} items={detail?.followups || []} />
+      </section>
+
+      <section>
         <h3>{t.suggested}</h3>
         {templates.map((template) => (
           <article className="message" key={template.id}>
@@ -615,13 +624,6 @@ function OrderDrawer({ t, order, detail, employees, templates, note, setNote, co
           <button onClick={markFollowed}>{t.addNote}</button>
           <button onClick={markDone}>{t.done}</button>
         </div>
-        {(detail?.followups || []).map((followup) => (
-          <article className="note" key={followup.id}>
-            <strong>{followup.action_type}</strong>
-            <p>{followup.note}</p>
-            <span>{followup.created_at?.slice(0, 16)}</span>
-          </article>
-        ))}
       </section>
 
       <section>
@@ -637,6 +639,33 @@ function OrderDrawer({ t, order, detail, employees, templates, note, setNote, co
         ))}
       </section>
     </aside>
+  );
+}
+
+function ActionHistory({ t, items }) {
+  const sorted = [...items].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  if (!sorted.length) return <div className="empty compact">{t.noHistory}</div>;
+
+  return (
+    <div className="historyList">
+      {sorted.map((item) => (
+        <article className="historyItem" key={item.id}>
+          <div className="historyDot" />
+          <div>
+            <div className="historyTop">
+              <strong>{humanAction(item.action_type)}</strong>
+              <span>{item.created_at ? new Date(item.created_at).toLocaleString("fr-MA", { dateStyle: "short", timeStyle: "short" }) : "-"}</span>
+            </div>
+            <p>{item.note || "No note added."}</p>
+            <div className="historyMeta">
+              <small>{item.employees?.name || "Employee"}</small>
+              {item.next_action && <small>{t.nextAction}: {humanAction(item.next_action)}</small>}
+              {item.customer_response && <small>Response: {item.customer_response}</small>}
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -801,6 +830,7 @@ function humanAction(action = "") {
     message_copied: "Message copied",
     copied_message: "Message copied",
     whatsapp_opened: "WhatsApp opened",
+    whatsapp_followup: "WhatsApp follow-up",
     waiting_customer: "Waiting customer",
     wait_customer_response: "Waiting customer",
     manual_followup: "Manual note",

@@ -6,7 +6,7 @@ export async function getOrderById(id) {
   return dbQuery(
     supabase
       .from("orders")
-      .select("*, order_status_history(*), followups(*), commissions(*)")
+      .select("*, order_status_history(*), followups(*, employees(name,email)), commissions(*)")
       .eq("id", id)
       .single()
   );
