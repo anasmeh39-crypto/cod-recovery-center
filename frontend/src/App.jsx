@@ -21,6 +21,15 @@ const i18n = {
     totalCommission: "Commission totale",
     recoveryRate: "Recovery rate",
     followedToday: "Suivies aujourd'hui",
+    todayWork: "Travail du jour",
+    nextOrder: "Prochaine commande",
+    startWith: "Commencer par cette commande",
+    quickStats: "Resume rapide",
+    queueHealth: "Etat de la file",
+    urgentOrders: "Urgent",
+    doneToday: "Actions aujourd'hui",
+    employeeEarnings: "Gain employe",
+    cleanQueue: "File propre",
     search: "Rechercher phone, order ID, client...",
     status: "Statut",
     city: "Ville",
@@ -78,6 +87,15 @@ const i18n = {
     totalCommission: "مجموع العمولة",
     recoveryRate: "نسبة الإنقاذ",
     followedToday: "تمت متابعتها اليوم",
+    todayWork: "عمل اليوم",
+    nextOrder: "الطلب التالي",
+    startWith: "ابدأ بهذا الطلب",
+    quickStats: "ملخص سريع",
+    queueHealth: "حالة القائمة",
+    urgentOrders: "مستعجل",
+    doneToday: "إجراءات اليوم",
+    employeeEarnings: "ربح الموظف",
+    cleanQueue: "قائمة واضحة",
     search: "بحث بالهاتف، الطلب، الزبون...",
     status: "الحالة",
     city: "المدينة",
@@ -236,8 +254,10 @@ export default function App() {
   const metrics = useMemo(() => {
     const recovered = orders.filter((order) => order.is_recovered).length;
     const actionBase = orders.filter((order) => order.followup_attempts > 0 || order.is_recovered).length;
+    const urgent = problematicOrders.filter((order) => ["Refusé", "Retourné", "Injoignable", "Téléphone incorrect"].includes(order.current_status)).length;
     return {
       actionOrders: problematicOrders.length,
+      urgent,
       recovered,
       totalCommission: commissionSummary.total || commissions.reduce((sum, item) => sum + Number(item.amount || 0), 0),
       recoveryRate: actionBase ? Math.round((recovered / actionBase) * 100) : 0,
@@ -383,13 +403,13 @@ export default function App() {
 
         {view === "dashboard" && (
           <>
-            <section className="metrics">
-              <Metric label={t.actionOrders} value={metrics.actionOrders} tone="red" />
-              <Metric label={t.followedToday} value={metrics.followedToday} tone="orange" />
-              <Metric label={t.recovered} value={metrics.recovered} tone="green" />
-              <Metric label={t.totalCommission} value={money(metrics.totalCommission)} tone="green" />
-              <Metric label={t.recoveryRate} value={`${metrics.recoveryRate}%`} tone="gray" />
-            </section>
+            <DashboardOverview
+              t={t}
+              metrics={metrics}
+              nextOrder={sortedQueue[0]}
+              queueOrders={sortedQueue}
+              setSelectedOrder={setSelectedOrder}
+            />
             <RecoveryView
               t={t}
               filters={filters}
@@ -468,6 +488,75 @@ export default function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function DashboardOverview({ t, metrics, nextOrder, queueOrders, setSelectedOrder }) {
+  const statusCounts = queueOrders.reduce((acc, order) => {
+    acc[order.current_status] = (acc[order.current_status] || 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <section className="dashboardShell">
+      <div className="panel focusPanel">
+        <div>
+          <p className="eyebrow">{t.todayWork}</p>
+          <h2>{t.cleanQueue}</h2>
+          <p>Only orders that still need recovery are here. Contact once, save the action, then mark Done.</p>
+        </div>
+        <div className="focusStats">
+          <MiniStat label={t.actionOrders} value={metrics.actionOrders} tone="red" />
+          <MiniStat label={t.doneToday} value={metrics.followedToday} tone="orange" />
+          <MiniStat label={t.employeeEarnings} value={money(metrics.totalCommission)} tone="green" />
+        </div>
+      </div>
+
+      <div className="panel nextPanel">
+        <div className="panelTitleRow">
+          <div>
+            <p className="eyebrow">{t.nextOrder}</p>
+            <h2>{nextOrder ? nextOrder.customer_name : "Queue clear"}</h2>
+          </div>
+          {nextOrder && <Priority order={nextOrder} />}
+        </div>
+        {nextOrder ? (
+          <>
+            <div className="nextDetails">
+              <Info label="Order" value={nextOrder.sendit_order_id} />
+              <Info label="Phone" value={nextOrder.phone} />
+              <Info label={t.city} value={nextOrder.city} />
+              <Info label={t.status} value={nextOrder.current_status} />
+            </div>
+            <button className="primary wideButton" onClick={() => setSelectedOrder(nextOrder)}>{t.startWith}</button>
+          </>
+        ) : (
+          <div className="empty compact">No active recovery orders.</div>
+        )}
+      </div>
+
+      <div className="panel compactPanel">
+        <p className="eyebrow">{t.quickStats}</p>
+        <div className="statRows">
+          <div><span>{t.urgentOrders}</span><strong>{metrics.urgent}</strong></div>
+          <div><span>{t.recovered}</span><strong>{metrics.recovered}</strong></div>
+          <div><span>{t.recoveryRate}</span><strong>{metrics.recoveryRate}%</strong></div>
+        </div>
+      </div>
+
+      <div className="panel compactPanel">
+        <p className="eyebrow">{t.queueHealth}</p>
+        <div className="statusChips">
+          {Object.entries(statusCounts).map(([status, count]) => (
+            <button key={status} onClick={() => setSelectedOrder(queueOrders.find((order) => order.current_status === status))}>
+              <Status status={status} />
+              <strong>{count}</strong>
+            </button>
+          ))}
+          {!Object.keys(statusCounts).length && <div className="empty compact">Nothing pending.</div>}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -806,6 +895,10 @@ function Settings({ t, employees, employeeDraft, setEmployeeDraft, createEmploye
 
 function Metric({ label, value, tone }) {
   return <div className={`metric ${tone}`}><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function MiniStat({ label, value, tone }) {
+  return <div className={`miniStat ${tone}`}><span>{label}</span><strong>{value}</strong></div>;
 }
 
 function Priority({ order }) {
