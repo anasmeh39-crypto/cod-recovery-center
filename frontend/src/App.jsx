@@ -10,7 +10,9 @@ const i18n = {
     app: "COD Recovery Center",
     subtitle: "Recuperer les commandes Sendit problematiques et convertir les pertes en livraisons.",
     dashboard: "Dashboard",
+    queue: "Today's Recovery Queue",
     recovery: "Recovery Center",
+    activity: "Activity",
     commissions: "Commission Center",
     templates: "Message Templates",
     settings: "Settings",
@@ -30,12 +32,23 @@ const i18n = {
     timeline: "Timeline statut",
     notes: "Notes de suivi",
     suggested: "Message suggere",
+    quickActions: "Actions rapides",
+    done: "Done",
+    copiedMessage: "Message copie",
+    whatsappOpened: "WhatsApp ouvert",
+    editBeforeCopy: "Modifier avant copier",
     copy: "Copier",
     whatsapp: "WhatsApp",
     addNote: "Ajouter note",
     assign: "Assigner",
     markFollowed: "Marquer suivi",
     markRecovered: "Marquer recupere",
+    nextAction: "Next action",
+    lastAction: "Derniere action",
+    adminTracking: "Suivi admin",
+    today: "Aujourd'hui",
+    yesterday: "Hier",
+    month: "Ce mois",
     pending: "Pending",
     approved: "Approved",
     approve: "Approuver",
@@ -52,7 +65,9 @@ const i18n = {
     app: "COD Recovery Center",
     subtitle: "إنقاذ طلبات Sendit المشكلة وتحويلها إلى طلبات مسلمة.",
     dashboard: "لوحة التحكم",
+    queue: "قائمة الريكوفري اليوم",
     recovery: "مركز الريكوفري",
+    activity: "النشاط",
     commissions: "مركز العمولات",
     templates: "رسائل المتابعة",
     settings: "الإعدادات",
@@ -72,12 +87,23 @@ const i18n = {
     timeline: "مسار الحالة",
     notes: "ملاحظات المتابعة",
     suggested: "رسالة مقترحة",
+    quickActions: "إجراءات سريعة",
+    done: "تم",
+    copiedMessage: "تم نسخ الرسالة",
+    whatsappOpened: "تم فتح واتساب",
+    editBeforeCopy: "تعديل قبل النسخ",
     copy: "نسخ",
     whatsapp: "واتساب",
     addNote: "إضافة ملاحظة",
     assign: "تعيين",
     markFollowed: "تحديد كمتابع",
     markRecovered: "تحديد كمنقذ",
+    nextAction: "الإجراء التالي",
+    lastAction: "آخر إجراء",
+    adminTracking: "تتبع الإدارة",
+    today: "اليوم",
+    yesterday: "أمس",
+    month: "هذا الشهر",
     pending: "معلقة",
     approved: "مصادق عليها",
     approve: "مصادقة",
@@ -94,10 +120,6 @@ const i18n = {
 
 function money(value) {
   return `${Number(value || 0).toLocaleString("fr-MA")} MAD`;
-}
-
-function todayIsoDate() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function renderTemplate(message, order) {
@@ -128,6 +150,10 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [employeeDraft, setEmployeeDraft] = useState({ name: "", email: "", role: "recovery" });
   const [templateDraft, setTemplateDraft] = useState({ status: "Refusé", language: "darija", title: "", message: "" });
+  const [messageEdits, setMessageEdits] = useState({});
+  const [activityRange, setActivityRange] = useState("today");
+  const [activity, setActivity] = useState({ total: 0, byEmployee: [], activity: [] });
+  const [todayActivityTotal, setTodayActivityTotal] = useState(0);
 
   const t = i18n[language];
 
@@ -135,13 +161,14 @@ export default function App() {
     setLoading(true);
     setError("");
     try {
-      const [allOrders, problemOrders, staff, allCommissions, summary, allTemplates] = await Promise.all([
+      const [allOrders, problemOrders, staff, allCommissions, summary, allTemplates, todayActivity] = await Promise.all([
         api.orders(),
         api.problematicOrders(),
         api.employees(),
         api.commissions(),
         api.commissionSummary(),
         api.templates(),
+        api.activity("today"),
       ]);
       setOrders(allOrders);
       setProblematicOrders(problemOrders);
@@ -149,7 +176,12 @@ export default function App() {
       setCommissions(allCommissions);
       setCommissionSummary(summary);
       setTemplates(allTemplates);
-      setSelectedOrder(problemOrders[0] || allOrders[0] || null);
+      setTodayActivityTotal(todayActivity.total || 0);
+      const stillActive = selectedOrder?.id ? problemOrders.find((order) => order.id === selectedOrder.id) : null;
+      setSelectedOrder(stillActive || problemOrders[0] || allOrders[0] || null);
+      if (view === "activity") {
+        setActivity(await api.activity(activityRange));
+      }
     } catch (err) {
       setError(err.message || t.apiIssue);
     } finally {
@@ -160,6 +192,11 @@ export default function App() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (view !== "activity") return;
+    api.activity(activityRange).then(setActivity).catch((err) => setError(err.message));
+  }, [activityRange, view]);
 
   useEffect(() => {
     if (!selectedOrder?.id) return;
@@ -183,35 +220,62 @@ export default function App() {
     });
   }, [filters, problematicOrders]);
 
+  const sortedQueue = useMemo(() => {
+    const score = { Refusé: 5, Retourné: 5, Injoignable: 4, "Téléphone incorrect": 4, "Adresse incorrecte": 3, "En retard": 3, Annulé: 2, Reporté: 1 };
+    return [...filteredOrders].sort((a, b) => {
+      const aScore = score[a.current_status] || 0;
+      const bScore = score[b.current_status] || 0;
+      return bScore - aScore || Number(a.followup_attempts || 0) - Number(b.followup_attempts || 0);
+    });
+  }, [filteredOrders]);
+
   const metrics = useMemo(() => {
     const recovered = orders.filter((order) => order.is_recovered).length;
-    const followedToday = (selectedDetail?.followups || []).filter((item) => item.created_at?.startsWith(todayIsoDate())).length;
     const actionBase = orders.filter((order) => order.followup_attempts > 0 || order.is_recovered).length;
     return {
       actionOrders: problematicOrders.length,
       recovered,
       totalCommission: commissionSummary.total || commissions.reduce((sum, item) => sum + Number(item.amount || 0), 0),
       recoveryRate: actionBase ? Math.round((recovered / actionBase) * 100) : 0,
-      followedToday,
+      followedToday: todayActivityTotal,
     };
-  }, [orders, problematicOrders.length, commissionSummary.total, commissions, selectedDetail]);
+  }, [orders, problematicOrders.length, commissionSummary.total, commissions, todayActivityTotal]);
 
   const suggestedTemplates = useMemo(() => {
     if (!selectedOrder) return [];
     return templates.filter((template) => template.status === selectedOrder.current_status);
   }, [selectedOrder, templates]);
 
+  function templateText(template) {
+    return messageEdits[template.id] ?? renderTemplate(template.message, selectedOrder);
+  }
+
+  async function autoFollowup(actionType, noteText, nextAction = "wait_customer_response") {
+    if (!selectedOrder) return;
+    const employeeId = selectedOrder.assigned_employee_id || employees[0]?.id;
+    if (!employeeId) return setError("Create an employee first.");
+    await api.followup(selectedOrder.id, {
+      employee_id: employeeId,
+      action_type: actionType,
+      note: noteText,
+      next_action: nextAction,
+    });
+    await loadData();
+  }
+
   async function copyMessage(template) {
-    const message = renderTemplate(template.message, selectedOrder);
+    const message = templateText(template);
     await navigator.clipboard.writeText(message);
     setCopied(template.id);
     setTimeout(() => setCopied(""), 1200);
+    await autoFollowup("copied_message", `Copied message: ${template.title}`, "message_copied");
   }
 
-  function openWhatsApp(template) {
+  async function openWhatsApp(template) {
     if (!selectedOrder) return;
-    const message = encodeURIComponent(renderTemplate(template.message, selectedOrder));
+    const message = encodeURIComponent(templateText(template));
     window.open(`https://wa.me/${selectedOrder.phone}?text=${message}`, "_blank", "noopener,noreferrer");
+    await autoFollowup("whatsapp_opened", `Opened WhatsApp with message: ${template.title}`, "waiting_customer");
   }
 
   async function assignSelected(employeeId) {
@@ -229,6 +293,18 @@ export default function App() {
       action_type: "whatsapp_followup",
       note,
       next_action: "wait_customer_response",
+    });
+    setNote("");
+    await loadData();
+  }
+
+  async function markDone() {
+    if (!selectedOrder) return;
+    const employeeId = selectedOrder.assigned_employee_id || employees[0]?.id;
+    if (!employeeId) return setError("Create an employee first.");
+    await api.markDone(selectedOrder.id, {
+      employee_id: employeeId,
+      note: note || "Customer already contacted. Marked done to avoid duplicate work.",
     });
     setNote("");
     await loadData();
@@ -274,8 +350,9 @@ export default function App() {
         <nav>
           {[
             ["dashboard", t.dashboard],
-            ["recovery", t.recovery],
+            ["recovery", t.queue],
             ["commissions", t.commissions],
+            ["activity", t.activity],
             ["templates", t.templates],
             ["settings", t.settings],
           ].map(([key, label]) => (
@@ -315,6 +392,7 @@ export default function App() {
               setFilters={setFilters}
               employees={employees}
               orders={filteredOrders}
+              queueOrders={sortedQueue}
               selectedOrder={selectedOrder}
               setSelectedOrder={setSelectedOrder}
               selectedDetail={selectedDetail}
@@ -324,8 +402,11 @@ export default function App() {
               copied={copied}
               copyMessage={copyMessage}
               openWhatsApp={openWhatsApp}
+              messageEdits={messageEdits}
+              setMessageEdits={setMessageEdits}
               assignSelected={assignSelected}
               markFollowed={markFollowed}
+              markDone={markDone}
               markRecovered={markRecovered}
             />
           </>
@@ -338,6 +419,7 @@ export default function App() {
             setFilters={setFilters}
             employees={employees}
             orders={filteredOrders}
+            queueOrders={sortedQueue}
             selectedOrder={selectedOrder}
             setSelectedOrder={setSelectedOrder}
             selectedDetail={selectedDetail}
@@ -347,14 +429,21 @@ export default function App() {
             copied={copied}
             copyMessage={copyMessage}
             openWhatsApp={openWhatsApp}
+            messageEdits={messageEdits}
+            setMessageEdits={setMessageEdits}
             assignSelected={assignSelected}
             markFollowed={markFollowed}
+            markDone={markDone}
             markRecovered={markRecovered}
           />
         )}
 
         {view === "commissions" && (
           <CommissionCenter t={t} commissions={commissions} summary={commissionSummary} refresh={loadData} />
+        )}
+
+        {view === "activity" && (
+          <ActivityCenter t={t} range={activityRange} setRange={setActivityRange} activity={activity} />
         )}
 
         {view === "templates" && (
@@ -379,14 +468,14 @@ export default function App() {
 }
 
 function RecoveryView(props) {
-  const { t, filters, setFilters, employees, orders, selectedOrder, setSelectedOrder, selectedDetail, suggestedTemplates, note, setNote, copied, copyMessage, openWhatsApp, assignSelected, markFollowed, markRecovered } = props;
+  const { t, filters, setFilters, employees, queueOrders, selectedOrder, setSelectedOrder, selectedDetail, suggestedTemplates, note, setNote, copied, copyMessage, openWhatsApp, messageEdits, setMessageEdits, assignSelected, markFollowed, markDone, markRecovered } = props;
   return (
     <section className="workArea">
       <div className="panel">
         <div className="panelHeader">
           <div>
-            <h2>{t.recovery}</h2>
-            <p>Only problematic Sendit orders are listed.</p>
+            <h2>{t.queue}</h2>
+            <p>Simple queue: contact once, log the action, then mark done to avoid duplicate work.</p>
           </div>
         </div>
         <div className="filters">
@@ -406,38 +495,34 @@ function RecoveryView(props) {
           <table>
             <thead>
               <tr>
+                <th>Priority</th>
                 <th>Order</th>
                 <th>{t.customer}</th>
                 <th>Phone</th>
                 <th>{t.city}</th>
-                <th>{t.product}</th>
-                <th>Amount</th>
                 <th>{t.status}</th>
-                <th>Previous</th>
-                <th>{t.employee}</th>
                 <th>Attempts</th>
-                <th>Updated</th>
+                <th>{t.nextAction}</th>
+                <th>{t.lastAction}</th>
               </tr>
             </thead>
             <tbody>
-              {orders.map((order) => (
+              {queueOrders.map((order) => (
                 <tr key={order.id} onClick={() => setSelectedOrder(order)} className={selectedOrder?.id === order.id ? "selected" : ""}>
+                  <td><Priority order={order} /></td>
                   <td><strong>{order.sendit_order_id}</strong><span>{order.order_reference}</span></td>
                   <td>{order.customer_name}</td>
                   <td>{order.phone}</td>
                   <td>{order.city}</td>
-                  <td>{order.product_name}</td>
-                  <td>{money(order.amount)}</td>
                   <td><Status status={order.current_status} /></td>
-                  <td>{order.previous_status}</td>
-                  <td>{order.employees?.name || "Unassigned"}</td>
                   <td>{order.followup_attempts}</td>
+                  <td>{humanAction(order.next_action)}</td>
                   <td>{order.last_status_update?.slice(0, 16)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!orders.length && <div className="empty">No recovery orders found.</div>}
+          {!queueOrders.length && <div className="empty">No recovery orders found.</div>}
         </div>
       </div>
       <OrderDrawer
@@ -451,15 +536,18 @@ function RecoveryView(props) {
         copied={copied}
         copyMessage={copyMessage}
         openWhatsApp={openWhatsApp}
+        messageEdits={messageEdits}
+        setMessageEdits={setMessageEdits}
         assignSelected={assignSelected}
         markFollowed={markFollowed}
+        markDone={markDone}
         markRecovered={markRecovered}
       />
     </section>
   );
 }
 
-function OrderDrawer({ t, order, detail, employees, templates, note, setNote, copied, copyMessage, openWhatsApp, assignSelected, markFollowed, markRecovered }) {
+function OrderDrawer({ t, order, detail, employees, templates, note, setNote, copied, copyMessage, openWhatsApp, messageEdits, setMessageEdits, assignSelected, markFollowed, markDone, markRecovered }) {
   if (!order) return <aside className="panel drawer padded">Select an order.</aside>;
   return (
     <aside className="panel drawer">
@@ -485,9 +573,18 @@ function OrderDrawer({ t, order, detail, employees, templates, note, setNote, co
         {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
       </select>
 
+      <section>
+        <h3>{t.quickActions}</h3>
+        <div className="actionGrid three">
+          <button onClick={markFollowed}>{t.markFollowed}</button>
+          <button onClick={markDone}>{t.done}</button>
+          <button className="primary" onClick={markRecovered}>{t.markRecovered}</button>
+        </div>
+      </section>
+
       <div className="actionGrid">
-        <button onClick={markFollowed}>{t.markFollowed}</button>
-        <button className="primary" onClick={markRecovered}>{t.markRecovered}</button>
+        <Info label={t.nextAction} value={humanAction(order.next_action || detail?.followups?.[0]?.next_action)} />
+        <Info label="Attempts" value={order.followup_attempts} />
       </div>
 
       <section>
@@ -498,10 +595,14 @@ function OrderDrawer({ t, order, detail, employees, templates, note, setNote, co
               <strong>{template.title}</strong>
               <span>{template.language}</span>
             </div>
-            <p>{renderTemplate(template.message, order)}</p>
+            <label>{t.editBeforeCopy}</label>
+            <textarea
+              value={messageEdits[template.id] ?? renderTemplate(template.message, order)}
+              onChange={(event) => setMessageEdits((current) => ({ ...current, [template.id]: event.target.value }))}
+            />
             <div className="actionGrid">
-              <button onClick={() => copyMessage(template)}>{copied === template.id ? "Copied" : t.copy}</button>
-              <button onClick={() => openWhatsApp(template)}>{t.whatsapp}</button>
+              <button onClick={() => copyMessage(template)}>{copied === template.id ? t.copiedMessage : t.copy}</button>
+              <button onClick={() => openWhatsApp(template)}>{t.whatsappOpened}</button>
             </div>
           </article>
         ))}
@@ -510,7 +611,10 @@ function OrderDrawer({ t, order, detail, employees, templates, note, setNote, co
       <section>
         <h3>{t.notes}</h3>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={t.addNote} />
-        <button onClick={markFollowed}>{t.addNote}</button>
+        <div className="actionGrid">
+          <button onClick={markFollowed}>{t.addNote}</button>
+          <button onClick={markDone}>{t.done}</button>
+        </div>
         {(detail?.followups || []).map((followup) => (
           <article className="note" key={followup.id}>
             <strong>{followup.action_type}</strong>
@@ -558,6 +662,52 @@ function CommissionCenter({ t, commissions, summary, refresh }) {
             </div>
             {commission.status !== "approved" && <button onClick={async () => { await api.approveCommission(commission.id); await refresh(); }}>{t.approve}</button>}
           </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ActivityCenter({ t, range, setRange, activity }) {
+  return (
+    <section className="gridTwo">
+      <div className="panel padded">
+        <div className="panelTitleRow">
+          <div>
+            <h2>{t.adminTracking}</h2>
+            <p>Track what each employee did without opening every order.</p>
+          </div>
+          <select value={range} onChange={(event) => setRange(event.target.value)}>
+            <option value="today">{t.today}</option>
+            <option value="yesterday">{t.yesterday}</option>
+            <option value="month">{t.month}</option>
+          </select>
+        </div>
+
+        {(activity.byEmployee || []).map((employee) => (
+          <div className="activitySummary" key={employee.employee_id}>
+            <strong>{employee.name}</strong>
+            <span>{employee.total} actions</span>
+            <div>
+              <small>{employee.copied_message || 0} copied</small>
+              <small>{employee.whatsapp_opened || 0} WhatsApp</small>
+              <small>{employee.done || 0} done</small>
+            </div>
+          </div>
+        ))}
+        {!activity.byEmployee?.length && <div className="empty">No activity in this period.</div>}
+      </div>
+
+      <div className="panel padded">
+        <h2>{t.activity}</h2>
+        {(activity.activity || []).map((item) => (
+          <article className="rowCard activityRow" key={item.id}>
+            <div>
+              <strong>{item.employees?.name || "Employee"} · {humanAction(item.action_type)}</strong>
+              <span>{item.orders?.sendit_order_id} · {item.orders?.customer_name} · {item.created_at?.slice(0, 16)}</span>
+              <p>{item.note}</p>
+            </div>
+          </article>
         ))}
       </div>
     </section>
@@ -629,6 +779,13 @@ function Metric({ label, value, tone }) {
   return <div className={`metric ${tone}`}><span>{label}</span><strong>{value}</strong></div>;
 }
 
+function Priority({ order }) {
+  const urgentStatuses = ["Refusé", "Retourné", "Injoignable", "Téléphone incorrect"];
+  const tone = urgentStatuses.includes(order.current_status) || Number(order.followup_attempts || 0) === 0 ? "red" : Number(order.followup_attempts || 0) > 1 ? "orange" : "green";
+  const label = tone === "red" ? "Urgent" : tone === "orange" ? "Review" : "Normal";
+  return <span className={`status ${tone}`}>{label}</span>;
+}
+
 function Status({ status }) {
   const tone = status === "Livré" ? "green" : ["Refusé", "Injoignable"].includes(status) ? "red" : ["Annulé", "Retourné"].includes(status) ? "gray" : "orange";
   return <span className={`status ${tone}`}>{status}</span>;
@@ -636,4 +793,18 @@ function Status({ status }) {
 
 function Info({ label, value }) {
   return <div className="info"><span>{label}</span><strong>{value || "-"}</strong></div>;
+}
+
+function humanAction(action = "") {
+  const labels = {
+    new_recovery: "New",
+    message_copied: "Message copied",
+    copied_message: "Message copied",
+    whatsapp_opened: "WhatsApp opened",
+    waiting_customer: "Waiting customer",
+    wait_customer_response: "Waiting customer",
+    manual_followup: "Manual note",
+    done: "Done",
+  };
+  return labels[action] || action || "-";
 }

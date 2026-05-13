@@ -12,6 +12,40 @@ export async function getOrderById(id) {
   );
 }
 
+export async function getActiveProblematicOrders() {
+  const orders = await dbQuery(
+    supabase
+      .from("orders")
+      .select("*, employees(name,email)")
+      .eq("is_problematic", true)
+      .eq("is_recovered", false)
+      .order("last_status_update", { ascending: false })
+  );
+
+  if (!orders.length) return [];
+
+  const followups = await dbQuery(
+    supabase
+      .from("followups")
+      .select("order_id, action_type, next_action, created_at")
+      .in("order_id", orders.map((order) => order.id))
+      .order("created_at", { ascending: false })
+  );
+
+  const latestByOrder = followups.reduce((acc, followup) => {
+    if (!acc[followup.order_id]) acc[followup.order_id] = followup;
+    return acc;
+  }, {});
+
+  return orders
+    .filter((order) => latestByOrder[order.id]?.action_type !== "done")
+    .map((order) => ({
+      ...order,
+      latest_followup: latestByOrder[order.id] || null,
+      next_action: latestByOrder[order.id]?.next_action || "new_recovery",
+    }));
+}
+
 export async function recordFollowup(orderId, employeeId, body) {
   const followup = await dbQuery(
     supabase
@@ -42,6 +76,56 @@ export async function recordFollowup(orderId, employeeId, body) {
   );
 
   return followup;
+}
+
+export async function getFollowupActivity(range = "today") {
+  const now = new Date();
+  const start = new Date(now);
+  if (range === "yesterday") {
+    start.setDate(now.getDate() - 1);
+    start.setHours(0, 0, 0, 0);
+  } else if (range === "month") {
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+  } else {
+    start.setHours(0, 0, 0, 0);
+  }
+
+  const end = new Date(now);
+  if (range === "yesterday") {
+    end.setHours(0, 0, 0, 0);
+  }
+
+  let query = supabase
+    .from("followups")
+    .select("*, employees(name,email), orders(sendit_order_id, customer_name, current_status, city)")
+    .gte("created_at", start.toISOString())
+    .order("created_at", { ascending: false });
+
+  if (range === "yesterday") query = query.lt("created_at", end.toISOString());
+
+  const activity = await dbQuery(query);
+  const summary = activity.reduce((acc, item) => {
+    const employeeId = item.employee_id || "unassigned";
+    if (!acc.byEmployee[employeeId]) {
+      acc.byEmployee[employeeId] = {
+        employee_id: employeeId,
+        name: item.employees?.name || "Unassigned",
+        copied_message: 0,
+        whatsapp_opened: 0,
+        manual_followup: 0,
+        done: 0,
+        total: 0,
+      };
+    }
+    const type = item.action_type || "manual_followup";
+    acc.total += 1;
+    acc.byEmployee[employeeId].total += 1;
+    acc.byEmployee[employeeId][type] = (acc.byEmployee[employeeId][type] || 0) + 1;
+    return acc;
+  }, { total: 0, byEmployee: {} });
+
+  return { range, total: summary.total, byEmployee: Object.values(summary.byEmployee), activity };
 }
 
 export async function createCommissionIfEligible(order) {

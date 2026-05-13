@@ -5,7 +5,7 @@ import { config, requireEnv } from "./config.js";
 import { PROBLEM_STATUSES, isProblematicStatus, statusCategory } from "./constants.js";
 import { asyncHandler, errorHandler, requireSupabaseAuth, validateWebhookSecret } from "./middleware.js";
 import { mapSenditPayload } from "./senditMapper.js";
-import { createCommissionIfEligible, dbQuery, getOrderById, recordFollowup, supabase, upsertOrderFromSendit } from "./services-entry.js";
+import { createCommissionIfEligible, dbQuery, getActiveProblematicOrders, getFollowupActivity, getOrderById, recordFollowup, supabase, upsertOrderFromSendit } from "./services-entry.js";
 
 requireEnv();
 
@@ -40,13 +40,7 @@ app.get("/api/orders", asyncHandler(async (req, res) => {
 }));
 
 app.get("/api/orders/problematic", asyncHandler(async (req, res) => {
-  const query = supabase
-    .from("orders")
-    .select("*, employees(name,email)")
-    .eq("is_problematic", true)
-    .eq("is_recovered", false)
-    .order("last_status_update", { ascending: false });
-  res.json(await dbQuery(query));
+  res.json(await getActiveProblematicOrders());
 }));
 
 app.get("/api/orders/:id", asyncHandler(async (req, res) => {
@@ -71,6 +65,18 @@ app.post("/api/orders/:id/followup", asyncHandler(async (req, res) => {
   const { employee_id } = req.body;
   if (!employee_id) return res.status(400).json({ error: "employee_id is required" });
   res.status(201).json(await recordFollowup(req.params.id, employee_id, req.body));
+}));
+
+app.post("/api/orders/:id/done", asyncHandler(async (req, res) => {
+  const { employee_id } = req.body;
+  if (!employee_id) return res.status(400).json({ error: "employee_id is required" });
+  const followup = await recordFollowup(req.params.id, employee_id, {
+    action_type: "done",
+    note: req.body.note || "Order marked done for today. No more follow-up needed now.",
+    customer_response: req.body.customer_response || null,
+    next_action: "done",
+  });
+  res.status(201).json(followup);
 }));
 
 app.post("/api/orders/:id/mark-recovered", asyncHandler(async (req, res) => {
@@ -144,6 +150,10 @@ app.get("/api/commissions/summary", asyncHandler(async (req, res) => {
     return acc;
   }, { total: 0, count: 0, byEmployee: {} });
   res.json({ ...summary, byEmployee: Object.values(summary.byEmployee) });
+}));
+
+app.get("/api/followups/activity", asyncHandler(async (req, res) => {
+  res.json(await getFollowupActivity(req.query.range || "today"));
 }));
 
 app.post("/api/commissions/:id/approve", asyncHandler(async (req, res) => {
