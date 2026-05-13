@@ -201,6 +201,8 @@ The root-level `vercel.json` deploys:
 - Express API through Vercel serverless at `/api/*`
 
 In Vercel, import the GitHub repository and use the repository root.
+If your Vercel project was imported with `frontend` as the root directory,
+the app still works because `frontend/api` contains the serverless API copy.
 
 Environment variables:
 

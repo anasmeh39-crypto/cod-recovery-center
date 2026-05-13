@@ -11,6 +11,10 @@
   "dependencies": {
     "@supabase/supabase-js": "latest",
     "@vitejs/plugin-react": "latest",
+    "cors": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "morgan": "latest",
     "vite": "latest",
     "react": "latest",
     "react-dom": "latest"
