@@ -111,6 +111,28 @@ alter table commissions enable row level security;
 alter table message_templates enable row level security;
 alter table webhook_events enable row level security;
 
--- Backend uses SUPABASE_SERVICE_ROLE_KEY and bypasses RLS.
--- Add authenticated-user policies later if you want the frontend to read
--- Supabase directly instead of going through the Express API.
+-- Explicit Data API grants for Supabase's May/October 2026 permission changes.
+-- The app reads and writes business data only through the backend service role.
+grant usage on schema public to service_role;
+
+grant select, insert, update, delete on table
+  employees,
+  orders,
+  order_status_history,
+  followups,
+  commissions,
+  message_templates,
+  webhook_events
+to service_role;
+
+grant usage, select on all sequences in schema public to service_role;
+
+alter default privileges in schema public
+grant select, insert, update, delete on tables to service_role;
+
+alter default privileges in schema public
+grant usage, select on sequences to service_role;
+
+-- Backend uses SUPABASE_SERVICE_ROLE_KEY and bypasses RLS policies.
+-- Do not grant anon table access unless the frontend starts reading tables
+-- directly with supabase-js. Keep customer/order data behind the Express API.
