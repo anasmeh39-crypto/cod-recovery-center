@@ -11,7 +11,7 @@ export const config = {
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
   senditApiKey: process.env.SENDIT_API_KEY,
   senditApiBaseUrl: process.env.SENDIT_API_BASE_URL,
-  senditOrderDetailPath: process.env.SENDIT_ORDER_DETAIL_PATH || "/api/orders/{code}",
+  senditOrderDetailPath: process.env.SENDIT_ORDER_DETAIL_PATH || "/api/v1/deliveries/{code}",
   senditApiKeyHeader: process.env.SENDIT_API_KEY_HEADER || "Authorization",
   senditWebhookSecret: process.env.SENDIT_WEBHOOK_SECRET,
   defaultCommissionAmount: Number(process.env.DEFAULT_COMMISSION_AMOUNT || 15),
