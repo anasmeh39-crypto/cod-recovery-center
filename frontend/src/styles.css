@@ -293,6 +293,22 @@ td strong, td span { display: block; }
 .info { min-width: 0; padding: 12px; border-radius: 8px; background: rgba(100, 116, 139, .09); }
 .info span, .info strong { display: block; }
 .info strong { margin-top: 4px; font-size: 14px; word-break: break-word; }
+.warningBox {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(220, 38, 38, .2);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 14px;
+  color: #b91c1c;
+  background: rgba(220, 38, 38, .08);
+}
+.warningBox span { color: #64748b; font-weight: 800; }
+.detailsForm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
 label { display: block; margin: 12px 0 8px; font-weight: 900; }
 .actionGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0 18px; }
 .actionGrid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -403,7 +419,7 @@ label { display: block; margin: 12px 0 8px; font-weight: 900; }
   .toolbar { justify-content: flex-start; }
   .metrics { grid-template-columns: 1fr 1fr; }
   .focusStats, .nextDetails { grid-template-columns: 1fr; }
-  .filters, .infoGrid, .actionGrid, .actionGrid.three { grid-template-columns: 1fr; }
+  .filters, .infoGrid, .detailsForm, .actionGrid, .actionGrid.three { grid-template-columns: 1fr; }
   nav { grid-template-columns: 1fr 1fr; }
   .panelTitleRow { flex-direction: column; }
   .panelTitleRow select { max-width: none; }

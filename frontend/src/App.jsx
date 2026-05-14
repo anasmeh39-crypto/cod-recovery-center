@@ -30,6 +30,10 @@ const i18n = {
     doneToday: "Actions aujourd'hui",
     employeeEarnings: "Gain employe",
     cleanQueue: "File propre",
+    missingDetails: "Infos client manquantes",
+    completeDetails: "Completer les infos",
+    saveDetails: "Enregistrer infos",
+    syncSendit: "Sync Sendit",
     search: "Rechercher phone, order ID, client...",
     status: "Statut",
     city: "Ville",
@@ -96,6 +100,10 @@ const i18n = {
     doneToday: "إجراءات اليوم",
     employeeEarnings: "ربح الموظف",
     cleanQueue: "قائمة واضحة",
+    missingDetails: "معلومات الزبون ناقصة",
+    completeDetails: "أكمل المعلومات",
+    saveDetails: "حفظ المعلومات",
+    syncSendit: "مزامنة Sendit",
     search: "بحث بالهاتف، الطلب، الزبون...",
     status: "الحالة",
     city: "المدينة",
@@ -173,6 +181,7 @@ export default function App() {
   const [employeeDraft, setEmployeeDraft] = useState({ name: "", email: "", role: "recovery" });
   const [templateDraft, setTemplateDraft] = useState({ status: "Refusé", language: "darija", title: "", message: "" });
   const [messageEdits, setMessageEdits] = useState({});
+  const [detailsDraft, setDetailsDraft] = useState({});
   const [activityRange, setActivityRange] = useState("today");
   const [activity, setActivity] = useState({ total: 0, byEmployee: [], activity: [] });
   const [todayActivityTotal, setTodayActivityTotal] = useState(0);
@@ -223,6 +232,15 @@ export default function App() {
   useEffect(() => {
     if (!selectedOrder?.id) return;
     api.order(selectedOrder.id).then(setSelectedDetail).catch(() => setSelectedDetail(null));
+    setDetailsDraft({
+      customer_name: selectedOrder.customer_name === "Unknown customer" ? "" : selectedOrder.customer_name || "",
+      phone: selectedOrder.phone || "",
+      city: selectedOrder.city || "",
+      address: selectedOrder.address || "",
+      product_name: selectedOrder.product_name || "",
+      amount: selectedOrder.amount || "",
+      order_reference: selectedOrder.order_reference || "",
+    });
   }, [selectedOrder?.id]);
 
   const filteredOrders = useMemo(() => {
@@ -306,6 +324,22 @@ export default function App() {
     if (!selectedOrder) return;
     await api.assignOrder(selectedOrder.id, employeeId);
     await loadData();
+  }
+
+  async function saveDetails() {
+    if (!selectedOrder) return;
+    await api.updateOrderDetails(selectedOrder.id, detailsDraft);
+    await loadData();
+  }
+
+  async function syncSenditDetails() {
+    if (!selectedOrder) return;
+    try {
+      await api.syncSenditOrder(selectedOrder.id);
+      await loadData();
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   async function markFollowed() {
@@ -428,7 +462,11 @@ export default function App() {
               openWhatsApp={openWhatsApp}
               messageEdits={messageEdits}
               setMessageEdits={setMessageEdits}
+              detailsDraft={detailsDraft}
+              setDetailsDraft={setDetailsDraft}
               assignSelected={assignSelected}
+              saveDetails={saveDetails}
+              syncSenditDetails={syncSenditDetails}
               markFollowed={markFollowed}
               markDone={markDone}
               markRecovered={markRecovered}
@@ -455,7 +493,11 @@ export default function App() {
             openWhatsApp={openWhatsApp}
             messageEdits={messageEdits}
             setMessageEdits={setMessageEdits}
+            detailsDraft={detailsDraft}
+            setDetailsDraft={setDetailsDraft}
             assignSelected={assignSelected}
+            saveDetails={saveDetails}
+            syncSenditDetails={syncSenditDetails}
             markFollowed={markFollowed}
             markDone={markDone}
             markRecovered={markRecovered}
@@ -561,7 +603,7 @@ function DashboardOverview({ t, metrics, nextOrder, queueOrders, setSelectedOrde
 }
 
 function RecoveryView(props) {
-  const { t, filters, setFilters, employees, queueOrders, selectedOrder, setSelectedOrder, selectedDetail, suggestedTemplates, note, setNote, copied, copyMessage, openWhatsApp, messageEdits, setMessageEdits, assignSelected, markFollowed, markDone, markRecovered } = props;
+  const { t, filters, setFilters, employees, queueOrders, selectedOrder, setSelectedOrder, selectedDetail, suggestedTemplates, note, setNote, copied, copyMessage, openWhatsApp, messageEdits, setMessageEdits, detailsDraft, setDetailsDraft, assignSelected, saveDetails, syncSenditDetails, markFollowed, markDone, markRecovered } = props;
   return (
     <section className="workArea">
       <div className="panel">
@@ -631,7 +673,11 @@ function RecoveryView(props) {
         openWhatsApp={openWhatsApp}
         messageEdits={messageEdits}
         setMessageEdits={setMessageEdits}
+        detailsDraft={detailsDraft}
+        setDetailsDraft={setDetailsDraft}
         assignSelected={assignSelected}
+        saveDetails={saveDetails}
+        syncSenditDetails={syncSenditDetails}
         markFollowed={markFollowed}
         markDone={markDone}
         markRecovered={markRecovered}
@@ -640,8 +686,9 @@ function RecoveryView(props) {
   );
 }
 
-function OrderDrawer({ t, order, detail, employees, templates, note, setNote, copied, copyMessage, openWhatsApp, messageEdits, setMessageEdits, assignSelected, markFollowed, markDone, markRecovered }) {
+function OrderDrawer({ t, order, detail, employees, templates, note, setNote, copied, copyMessage, openWhatsApp, messageEdits, setMessageEdits, detailsDraft, setDetailsDraft, assignSelected, saveDetails, syncSenditDetails, markFollowed, markDone, markRecovered }) {
   if (!order) return <aside className="panel drawer padded">Select an order.</aside>;
+  const missingDetails = !order.phone || order.customer_name === "Unknown customer" || !order.product_name;
   return (
     <aside className="panel drawer">
       <div className="drawerTop">
@@ -653,12 +700,35 @@ function OrderDrawer({ t, order, detail, employees, templates, note, setNote, co
         <Status status={order.current_status} />
       </div>
 
+      {missingDetails && (
+        <div className="warningBox">
+          <strong>{t.missingDetails}</strong>
+          <span>{t.completeDetails}</span>
+        </div>
+      )}
+
       <div className="infoGrid">
         <Info label="Phone" value={order.phone} />
         <Info label="Address" value={order.address} />
         <Info label={t.product} value={order.product_name} />
         <Info label="Amount" value={money(order.amount)} />
       </div>
+
+      <section>
+        <h3>{t.completeDetails}</h3>
+        <div className="detailsForm">
+          <input placeholder={t.customer} value={detailsDraft.customer_name || ""} onChange={(e) => setDetailsDraft({ ...detailsDraft, customer_name: e.target.value })} />
+          <input placeholder="Phone" value={detailsDraft.phone || ""} onChange={(e) => setDetailsDraft({ ...detailsDraft, phone: e.target.value })} />
+          <input placeholder={t.city} value={detailsDraft.city || ""} onChange={(e) => setDetailsDraft({ ...detailsDraft, city: e.target.value })} />
+          <input placeholder="Address" value={detailsDraft.address || ""} onChange={(e) => setDetailsDraft({ ...detailsDraft, address: e.target.value })} />
+          <input placeholder={t.product} value={detailsDraft.product_name || ""} onChange={(e) => setDetailsDraft({ ...detailsDraft, product_name: e.target.value })} />
+          <input placeholder="Amount" value={detailsDraft.amount || ""} onChange={(e) => setDetailsDraft({ ...detailsDraft, amount: e.target.value })} />
+        </div>
+        <div className="actionGrid">
+          <button onClick={saveDetails}>{t.saveDetails}</button>
+          <button onClick={syncSenditDetails}>{t.syncSendit}</button>
+        </div>
+      </section>
 
       <label>{t.assign}</label>
       <select value={order.assigned_employee_id || ""} onChange={(e) => assignSelected(e.target.value)}>

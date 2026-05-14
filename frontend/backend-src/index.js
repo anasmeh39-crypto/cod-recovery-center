@@ -4,8 +4,9 @@ import morgan from "morgan";
 import { config, requireEnv } from "./config.js";
 import { PROBLEM_STATUSES, isProblematicStatus, statusCategory } from "./constants.js";
 import { asyncHandler, errorHandler, requireSupabaseAuth, validateWebhookSecret } from "./middleware.js";
+import { fetchSenditOrderDetails } from "./senditClient.js";
 import { mapSenditPayload } from "./senditMapper.js";
-import { createCommissionIfEligible, dbQuery, getActiveProblematicOrders, getFollowupActivity, getOrderById, recordFollowup, supabase, upsertOrderFromSendit } from "./services-entry.js";
+import { createCommissionIfEligible, dbQuery, getActiveProblematicOrders, getFollowupActivity, getOrderById, mergeOrderDetailsFromSendit, recordFollowup, supabase, updateOrderDetails, upsertOrderFromSendit } from "./services-entry.js";
 
 requireEnv();
 
@@ -60,6 +61,16 @@ app.post("/api/orders/:id/assign", asyncHandler(async (req, res) => {
       .single()
   );
   res.json(order);
+}));
+
+app.post("/api/orders/:id/details", asyncHandler(async (req, res) => {
+  res.json(await updateOrderDetails(req.params.id, req.body));
+}));
+
+app.post("/api/orders/:id/sync-sendit", asyncHandler(async (req, res) => {
+  const order = await getOrderById(req.params.id);
+  const details = await fetchSenditOrderDetails(order.sendit_order_id);
+  res.json(await mergeOrderDetailsFromSendit(req.params.id, details));
 }));
 
 app.post("/api/orders/:id/followup", asyncHandler(async (req, res) => {
@@ -203,6 +214,11 @@ app.post("/api/webhooks/sendit", validateWebhookSecret, asyncHandler(async (req,
   try {
     const mapped = mapSenditPayload(rawPayload);
     const order = await upsertOrderFromSendit(mapped, rawPayload);
+    if (order.sendit_order_id && (!order.phone || order.customer_name === "Unknown customer")) {
+      fetchSenditOrderDetails(order.sendit_order_id)
+        .then((details) => mergeOrderDetailsFromSendit(order.id, details))
+        .catch((error) => console.warn(`Sendit enrichment skipped for ${order.sendit_order_id}: ${error.message}`));
+    }
     await dbQuery(supabase.from("webhook_events").update({ processed: true }).eq("id", event.id).select());
     res.json({ ok: true, event_id: event.id, order_id: order.id, is_problematic: isProblematicStatus(order.current_status) });
   } catch (error) {

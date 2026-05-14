@@ -78,6 +78,47 @@ export async function recordFollowup(orderId, employeeId, body) {
   return followup;
 }
 
+export async function updateOrderDetails(orderId, body) {
+  const allowed = [
+    "customer_name",
+    "phone",
+    "city",
+    "address",
+    "product_name",
+    "amount",
+    "order_reference",
+  ];
+  const updates = allowed.reduce((acc, key) => {
+    if (body[key] !== undefined) acc[key] = key === "amount" ? Number(body[key] || 0) : body[key];
+    return acc;
+  }, {});
+
+  if (!Object.keys(updates).length) {
+    const error = new Error("No order details provided.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  updates.updated_at = new Date().toISOString();
+  return dbQuery(
+    supabase
+      .from("orders")
+      .update(updates)
+      .eq("id", orderId)
+      .select()
+      .single()
+  );
+}
+
+export async function mergeOrderDetailsFromSendit(orderId, senditDetails) {
+  const updates = {};
+  for (const key of ["customer_name", "phone", "city", "address", "product_name", "amount", "order_reference"]) {
+    const value = senditDetails[key];
+    if (value !== undefined && value !== null && value !== "" && value !== "Unknown customer") updates[key] = value;
+  }
+  return updateOrderDetails(orderId, updates);
+}
+
 export async function getFollowupActivity(range = "today") {
   const now = new Date();
   const start = new Date(now);
