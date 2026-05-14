@@ -13,7 +13,8 @@ const app = express();
 const isVercel = Boolean(process.env.VERCEL);
 
 app.use(cors({ origin: config.frontendOrigin === "*" || isVercel ? true : config.frontendOrigin, credentials: true }));
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "1mb", type: ["application/json", "application/*+json"] }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(morgan("dev"));
 
 app.get("/api/health", (req, res) => {
@@ -175,8 +176,18 @@ app.post("/api/message-templates", asyncHandler(async (req, res) => {
   res.status(201).json(await dbQuery(supabase.from("message_templates").insert({ status, language, title, message }).select().single()));
 }));
 
+function normalizeWebhookBody(body) {
+  if (!body) return {};
+  if (typeof body !== "string") return body;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return { raw_body: body };
+  }
+}
+
 app.post("/api/webhooks/sendit", validateWebhookSecret, asyncHandler(async (req, res) => {
-  const rawPayload = req.body;
+  const rawPayload = normalizeWebhookBody(req.body);
   const event = await dbQuery(
     supabase
       .from("webhook_events")
