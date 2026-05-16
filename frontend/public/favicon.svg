@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="COD Recovery Center">
+  <defs>
+    <linearGradient id="badge" x1="10" y1="8" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#dc2626"/>
+      <stop offset="0.45" stop-color="#f59e0b"/>
+      <stop offset="1" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="18" y1="10" x2="46" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.36"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#101624"/>
+  <path d="M32 7 52 15v16c0 13-8 22-20 26C20 53 12 44 12 31V15l20-8Z" fill="url(#badge)"/>
+  <path d="M32 7 52 15v5c-9 1-24 7-34 23-4-4-6-8-6-12V15l20-8Z" fill="url(#shine)"/>
+  <path d="M42.5 26.5c0-5.6-4.5-10-10.5-10-6.9 0-12 5.2-12 12.3 0 7 5 12.2 12 12.2 4.7 0 8.6-2.3 10.6-5.8" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+  <path d="M45 22v12h-12" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="43" cy="43" r="8" fill="#10b981" stroke="#101624" stroke-width="4"/>
+  <path d="m39.5 43.2 2.3 2.3 5-5.4" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
